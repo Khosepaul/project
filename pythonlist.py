@@ -2,6 +2,7 @@ from datetime import datetime, date
 
 FILE_NAME = "tasks.txt"
 
+
 def load_tasks():
     tasks = []
     try:
@@ -10,160 +11,306 @@ def load_tasks():
                 line = line.strip()
                 if not line:
                     continue
+
                 parts = line.split("|")
-                if len(parts) != 3:
+                if len(parts) != 4:
                     continue
-                text, done_str, due = parts
-                done = (done_str == "True")
-                tasks.append([text, done, due])
+
+                text, done_str, due, priority = parts
+                task = {
+                    "text": text,
+                    "done": (done_str == "True"),
+                    "due": due,
+                    "priority": priority
+                }
+                tasks.append(task)
     except FileNotFoundError:
         pass
     return tasks
 
+
 def save_tasks(tasks):
     with open(FILE_NAME, "w") as file:
-        for t in tasks:
-            file.write(f"{t[0]}|{t[1]}|{t[2]}\n")
+        for task in tasks:
+            file.write(f"{task['text']}|{task['done']}|{task['due']}|{task['priority']}\n")
 
-def due_key(t):
-    if t[2] == "NONE":
+
+def valid_date(date_text):
+    if date_text == "":
+        return "NONE"
+    try:
+        datetime.strptime(date_text, "%Y-%m-%d")
+        return date_text
+    except ValueError:
+        return None
+
+
+def valid_priority(priority_text):
+    priority_text = priority_text.strip().title()
+    if priority_text in ["High", "Medium", "Low"]:
+        return priority_text
+    return None
+
+
+def due_key(task):
+    if task["due"] == "NONE":
         return date.max
     try:
-        return datetime.strptime(t[2], "%Y-%m-%d").date()
+        return datetime.strptime(task["due"], "%Y-%m-%d").date()
     except ValueError:
         return date.max
 
-def is_overdue(t):
-    if t[1] or t[2] == "NONE":
+
+def priority_key(task):
+    order = {"High": 1, "Medium": 2, "Low": 3}
+    return order.get(task["priority"], 4)
+
+
+def is_overdue(task):
+    if task["done"] or task["due"] == "NONE":
         return False
     try:
-        return datetime.strptime(t[2], "%Y-%m-%d").date() < date.today()
+        return datetime.strptime(task["due"], "%Y-%m-%d").date() < date.today()
     except ValueError:
         return False
 
-def show_tasks(tasks, mode="all"):
-    if not tasks:
+
+def display_tasks(view):
+    if not view:
         print("\nNo tasks found.")
         return
 
+    print("\n" + "=" * 60)
+    print("YOUR TASKS")
+    print("=" * 60)
+
+    for i, task in enumerate(view, start=1):
+        status = "Complete" if task["done"] else "Incomplete"
+        due_display = task["due"] if task["due"] != "NONE" else "No due date"
+        overdue_tag = " [OVERDUE]" if is_overdue(task) else ""
+
+        print(f"{i}. {task['text']}")
+        print(f"   Status: {status}")
+        print(f"   Due: {due_display}")
+        print(f"   Priority: {task['priority']}{overdue_tag}")
+        print("-" * 60)
+
+
+def get_view(tasks, mode="all"):
     view = tasks[:]
 
-    if mode in ("all_sorted", "incomplete_sorted", "overdue_sorted"):
-        view.sort(key=due_key)
-
-    if mode == "incomplete_sorted":
-        view = [t for t in view if not t[1]]
+    if mode == "all_sorted":
+        view.sort(key=lambda t: (due_key(t), priority_key(t)))
+    elif mode == "incomplete_sorted":
+        view = [t for t in view if not t["done"]]
+        view.sort(key=lambda t: (due_key(t), priority_key(t)))
     elif mode == "overdue_sorted":
         view = [t for t in view if is_overdue(t)]
+        view.sort(key=lambda t: (due_key(t), priority_key(t)))
+    elif mode == "high_priority":
+        view = [t for t in view if t["priority"] == "High"]
+        view.sort(key=lambda t: (due_key(t), priority_key(t)))
 
+    return view
+
+
+def choose_task_from_view(tasks, mode="all"):
+    view = get_view(tasks, mode)
     if not view:
         print("\nNo tasks match that view.")
-        return
+        return None
 
-    print("\nYour Tasks:")
-    for i, t in enumerate(view, start=1):
-        status = "Complete" if t[1] else "Incomplete"
-        due_display = t[2] if t[2] != "NONE" else "No due date"
-        tag = " [OVERDUE]" if is_overdue(t) else ""
-        print(f"{i}. {t[0]} ({status}, Due: {due_display}){tag}")
+    display_tasks(view)
+
+    try:
+        num = int(input("Enter task number: "))
+        if 1 <= num <= len(view):
+            return view[num - 1]
+        else:
+            print("Invalid task number.")
+            return None
+    except ValueError:
+        print("Please enter a number.")
+        return None
+
 
 def add_task(tasks):
-    text = input("Enter a new task: ").strip()
+    print("\nADD TASK")
+    text = input("Enter task name: ").strip()
     if not text:
         print("Task cannot be empty.")
         return
 
-    due = input("Enter due date (YYYY-MM-DD) or press Enter for none: ").strip()
-    if due == "":
-        due = "NONE"
+    while True:
+        due_input = input("Enter due date (YYYY-MM-DD) or press Enter for none: ").strip()
+        due = valid_date(due_input)
+        if due is not None:
+            break
+        print("Invalid date format. Please use YYYY-MM-DD.")
 
-    tasks.append([text, False, due])
+    while True:
+        priority_input = input("Enter priority (High/Medium/Low): ").strip()
+        priority = valid_priority(priority_input)
+        if priority is not None:
+            break
+        print("Invalid priority. Please enter High, Medium, or Low.")
+
+    task = {
+        "text": text,
+        "done": False,
+        "due": due,
+        "priority": priority
+    }
+
+    tasks.append(task)
     save_tasks(tasks)
-    print("Task added.")
+    print("Task added successfully.")
+
 
 def delete_task(tasks):
-    show_tasks(tasks)
-    if not tasks:
+    print("\nDELETE TASK")
+    task = choose_task_from_view(tasks, "all_sorted")
+    if task is None:
         return
-    try:
-        num = int(input("Enter task number to delete: "))
-        if 1 <= num <= len(tasks):
-            removed = tasks.pop(num - 1)
-            save_tasks(tasks)
-            print(f"Deleted task: {removed[0]}")
-        else:
-            print("Invalid task number.")
-    except ValueError:
-        print("Please enter a number.")
+
+    tasks.remove(task)
+    save_tasks(tasks)
+    print(f"Deleted task: {task['text']}")
+
 
 def toggle_task(tasks):
-    show_tasks(tasks)
-    if not tasks:
+    print("\nTOGGLE COMPLETE/INCOMPLETE")
+    task = choose_task_from_view(tasks, "all_sorted")
+    if task is None:
         return
-    try:
-        num = int(input("Enter task number to toggle complete/incomplete: "))
-        if 1 <= num <= len(tasks):
-            tasks[num - 1][1] = not tasks[num - 1][1]
-            save_tasks(tasks)
-            print("Task updated.")
-        else:
-            print("Invalid task number.")
-    except ValueError:
-        print("Please enter a number.")
+
+    task["done"] = not task["done"]
+    save_tasks(tasks)
+    print("Task status updated.")
+
 
 def edit_due_date(tasks):
-    show_tasks(tasks)
-    if not tasks:
+    print("\nEDIT DUE DATE")
+    task = choose_task_from_view(tasks, "all_sorted")
+    if task is None:
         return
-    try:
-        num = int(input("Enter task number to change due date: "))
-        if 1 <= num <= len(tasks):
-            due = input("Enter new due date (YYYY-MM-DD) or press Enter for none: ").strip()
-            tasks[num - 1][2] = "NONE" if due == "" else due
-            save_tasks(tasks)
-            print("Due date updated.")
-        else:
-            print("Invalid task number.")
-    except ValueError:
-        print("Please enter a number.")
+
+    while True:
+        due_input = input("Enter new due date (YYYY-MM-DD) or press Enter for none: ").strip()
+        due = valid_date(due_input)
+        if due is not None:
+            break
+        print("Invalid date format. Please use YYYY-MM-DD.")
+
+    task["due"] = due
+    save_tasks(tasks)
+    print("Due date updated.")
+
+
+def edit_task_name(tasks):
+    print("\nEDIT TASK NAME")
+    task = choose_task_from_view(tasks, "all_sorted")
+    if task is None:
+        return
+
+    new_text = input("Enter new task name: ").strip()
+    if not new_text:
+        print("Task name cannot be empty.")
+        return
+
+    task["text"] = new_text
+    save_tasks(tasks)
+    print("Task name updated.")
+
+
+def edit_priority(tasks):
+    print("\nEDIT PRIORITY")
+    task = choose_task_from_view(tasks, "all_sorted")
+    if task is None:
+        return
+
+    while True:
+        priority_input = input("Enter new priority (High/Medium/Low): ").strip()
+        priority = valid_priority(priority_input)
+        if priority is not None:
+            break
+        print("Invalid priority. Please enter High, Medium, or Low.")
+
+    task["priority"] = priority
+    save_tasks(tasks)
+    print("Priority updated.")
+
+
+def search_tasks(tasks):
+    print("\nSEARCH TASKS")
+    keyword = input("Enter keyword to search: ").strip().lower()
+    if not keyword:
+        print("Search cannot be empty.")
+        return
+
+    results = [task for task in tasks if keyword in task["text"].lower()]
+
+    if not results:
+        print("No matching tasks found.")
+    else:
+        display_tasks(results)
+
+
+def show_menu():
+    print("\n" + "=" * 40)
+    print("TASK TRACKER MENU")
+    print("=" * 40)
+    print("1. View all tasks")
+    print("2. View all tasks (sorted)")
+    print("3. View incomplete tasks")
+    print("4. View overdue tasks")
+    print("5. View high priority tasks")
+    print("6. Add task")
+    print("7. Delete task")
+    print("8. Toggle complete/incomplete")
+    print("9. Edit due date")
+    print("10. Edit task name")
+    print("11. Edit priority")
+    print("12. Search tasks")
+    print("13. Quit")
+
 
 def main():
     tasks = load_tasks()
 
     while True:
-        print("\nTask Tracker Menu")
-        print("1. View tasks (all)")
-        print("2. View tasks (sorted by due date)")
-        print("3. View incomplete only (sorted)")
-        print("4. View overdue only (sorted)")
-        print("5. Add task")
-        print("6. Delete task")
-        print("7. Toggle complete/incomplete")
-        print("8. Edit due date")
-        print("9. Quit")
-
-        choice = input("Choose an option (1-9): ").strip()
+        show_menu()
+        choice = input("Choose an option (1-13): ").strip()
 
         if choice == "1":
-            show_tasks(tasks, "all")
+            display_tasks(get_view(tasks, "all"))
         elif choice == "2":
-            show_tasks(tasks, "all_sorted")
+            display_tasks(get_view(tasks, "all_sorted"))
         elif choice == "3":
-            show_tasks(tasks, "incomplete_sorted")
+            display_tasks(get_view(tasks, "incomplete_sorted"))
         elif choice == "4":
-            show_tasks(tasks, "overdue_sorted")
+            display_tasks(get_view(tasks, "overdue_sorted"))
         elif choice == "5":
-            add_task(tasks)
+            display_tasks(get_view(tasks, "high_priority"))
         elif choice == "6":
-            delete_task(tasks)
+            add_task(tasks)
         elif choice == "7":
-            toggle_task(tasks)
+            delete_task(tasks)
         elif choice == "8":
-            edit_due_date(tasks)
+            toggle_task(tasks)
         elif choice == "9":
+            edit_due_date(tasks)
+        elif choice == "10":
+            edit_task_name(tasks)
+        elif choice == "11":
+            edit_priority(tasks)
+        elif choice == "12":
+            search_tasks(tasks)
+        elif choice == "13":
             print("Goodbye!")
             break
         else:
             print("Invalid choice. Try again.")
+
 
 main()
