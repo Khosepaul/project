@@ -256,6 +256,28 @@ def search_tasks(tasks):
         display_tasks(results)
 
 
+def show_stats(tasks):
+    total = len(tasks)
+    completed = sum(1 for task in tasks if task["done"])
+    incomplete = total - completed
+    overdue = sum(1 for task in tasks if is_overdue(task))
+    high_priority = sum(1 for task in tasks if task["priority"] == "High")
+
+    print("\n" + "=" * 40)
+    print("TASK STATISTICS")
+    print("=" * 40)
+    print(f"Total tasks: {total}")
+    print(f"Completed tasks: {completed}")
+    print(f"Incomplete tasks: {incomplete}")
+    print(f"Overdue tasks: {overdue}")
+    print(f"High priority tasks: {high_priority}")
+
+    if total > 0:
+        percent_complete = (completed / total) * 100
+        print(f"Percent complete: {percent_complete:.1f}%")
+    print("=" * 40)
+
+
 def show_menu():
     print("\n" + "=" * 40)
     print("TASK TRACKER MENU")
@@ -272,7 +294,8 @@ def show_menu():
     print("10. Edit task name")
     print("11. Edit priority")
     print("12. Search tasks")
-    print("13. Quit")
+    print("13. Show statistics")
+    print("14. Quit")
 
 
 def main():
@@ -280,7 +303,7 @@ def main():
 
     while True:
         show_menu()
-        choice = input("Choose an option (1-13): ").strip()
+        choice = input("Choose an option (1-14): ").strip()
 
         if choice == "1":
             display_tasks(get_view(tasks, "all"))
@@ -307,6 +330,8 @@ def main():
         elif choice == "12":
             search_tasks(tasks)
         elif choice == "13":
+            show_stats(tasks)
+        elif choice == "14":
             print("Goodbye!")
             break
         else:
